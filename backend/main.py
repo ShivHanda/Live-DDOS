@@ -1,4 +1,6 @@
 import os
+import time
+import random
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,44 +18,76 @@ app.add_middleware(
 
 API_KEY = os.getenv("LiveDDOS")
 
-# --- GLOBAL MEMORY CACHE ---
-# Ye last successful data ko RAM mein store karega
+# --- SMART CACHE STORAGE ---
 CACHE_STORE = {
     "data": [],
-    "is_live": False
+    "last_updated": 0,  
+    "status_label": "INIT"
 }
+
+# --- FALLBACK SIMULATION ---
+def generate_simulation():
+    # Sirf tab chalega jab system start ho aur cache khali ho
+    hubs = [
+        {"city": "Beijing", "country": "CN", "lat": 39.90, "lon": 116.40},
+        {"city": "Moscow", "country": "RU", "lat": 55.75, "lon": 37.61},
+        {"city": "Lagos", "country": "NG", "lat": 6.52, "lon": 3.37},
+        {"city": "New York", "country": "US", "lat": 40.71, "lon": -74.00},
+        {"city": "Tokyo", "country": "JP", "lat": 35.67, "lon": 139.65}
+    ]
+    mock_data = []
+    for _ in range(15):
+        hub = random.choice(hubs)
+        mock_data.append({
+            "ip": f"192.168.{random.randint(10,99)}.{random.randint(1,255)}",
+            "lat": hub['lat'] + random.uniform(-1, 1),
+            "lon": hub['lon'] + random.uniform(-1, 1),
+            "city": hub['city'],
+            "country": hub['country']
+        })
+    return mock_data
 
 @app.get("/")
 def read_root():
-    return {"status": "System Operational"}
+    return {"system": "Operational", "mode": CACHE_STORE["status_label"]}
 
 @app.get("/attacks")
 def get_attacks():
     global CACHE_STORE
+    current_time = time.time()
     
+    # 1. TIME CHECK: 4 Hours 45 Minutes (17100 Seconds)
+    # Agar abhi 4h 45m nahi hue hain, to Cache use karo.
+    if CACHE_STORE["data"] and (current_time - CACHE_STORE["last_updated"] < 17100):
+        print("⚡ Serving from Cache (Next update in few hours)")
+        return {"status": "LIVE_CACHED", "data": CACHE_STORE["data"]}
+
+    # 2. FETCH NEW DATA (Jab time poora ho jaye)
+    if not API_KEY:
+        return {"status": "SIMULATION_NO_KEY", "data": generate_simulation()}
+
+    print("🔄 Time expired. Fetching fresh data from AbuseIPDB...")
     url = "https://api.abuseipdb.com/api/v2/blacklist"
-    # Limit thodi kam rakhte hain taaki jaldi exhaust na ho
-    params = {'confidenceMinimum': '90', 'limit': '25'} 
+    params = {'confidenceMinimum': '90', 'limit': '50'}
     headers = {'Accept': 'application/json', 'Key': API_KEY}
 
     try:
         response = requests.get(url, headers=headers, params=params)
         
-        # SCENARIO 1: API Limit Reached (429 Error)
+        # Handle Limit Exhaustion (429)
         if response.status_code == 429:
-            print("⚠️ Limit Reached. Serving Cached Data.")
-            return {
-                "status": "OFFLINE_REPLAY", 
-                "data": CACHE_STORE["data"] # Purana data bhejo
-            }
+            print("⚠️ API Limit Hit. Replaying Cache.")
+            if CACHE_STORE["data"]:
+                return {"status": "LIMIT_EXHAUSTED_REPLAY", "data": CACHE_STORE["data"]}
+            return {"status": "SIMULATION_FALLBACK", "data": generate_simulation()}
 
-        # SCENARIO 2: Success (200 OK)
+        # Success (200)
         if response.status_code == 200:
             raw_data = response.json().get('data', [])
             enriched_data = []
             
-            # Sirf 10 IPs ko enrich karenge to save time & resources
-            for item in raw_data[:10]:
+            # Enrich Data
+            for item in raw_data[:15]:
                 ip = item['ipAddress']
                 try:
                     geo = requests.get(f"http://ip-api.com/json/{ip}", timeout=1).json()
@@ -68,16 +102,18 @@ def get_attacks():
                 except:
                     continue
             
-            # Agar naya data mila hai, to Cache update karo
+            # Update Cache
             if enriched_data:
                 CACHE_STORE["data"] = enriched_data
-                CACHE_STORE["is_live"] = True
-                
-            return {"status": "LIVE", "data": enriched_data}
+                CACHE_STORE["last_updated"] = current_time
+                CACHE_STORE["status_label"] = "LIVE_FRESH"
+                return {"status": "LIVE_FRESH", "data": enriched_data}
             
     except Exception as e:
         print(f"Error: {e}")
-        # Agar koi aur error aaye, tab bhi cache use karo
-        return {"status": "ERROR_REPLAY", "data": CACHE_STORE["data"]}
 
-    return {"status": "UNKNOWN", "data": []}
+    # Fallback
+    if CACHE_STORE["data"]:
+         return {"status": "ERROR_REPLAY", "data": CACHE_STORE["data"]}
+         
+    return {"status": "ERROR_SIMULATION", "data": generate_simulation()}
