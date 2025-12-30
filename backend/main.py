@@ -2,7 +2,7 @@ import os
 import time
 import random
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -18,16 +18,13 @@ app.add_middleware(
 
 API_KEY = os.getenv("LiveDDOS")
 
-# --- SMART CACHE STORAGE ---
 CACHE_STORE = {
     "data": [],
-    "last_updated": 0,  
+    "last_updated": 0,
     "status_label": "INIT"
 }
 
-# --- FALLBACK SIMULATION ---
 def generate_simulation():
-    # Sirf tab chalega jab system start ho aur cache khali ho
     hubs = [
         {"city": "Beijing", "country": "CN", "lat": 39.90, "lon": 116.40},
         {"city": "Moscow", "country": "RU", "lat": 55.75, "lon": 37.61},
@@ -47,7 +44,8 @@ def generate_simulation():
         })
     return mock_data
 
-@app.get("/", methods=["GET", "HEAD"])
+# --- FIX: Using api_route to allow HEAD requests for UptimeRobot ---
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return {"system": "Operational", "mode": CACHE_STORE["status_label"]}
 
@@ -56,17 +54,13 @@ def get_attacks():
     global CACHE_STORE
     current_time = time.time()
     
-    # 1. TIME CHECK: 4 Hours 45 Minutes (17100 Seconds)
-    # Agar abhi 4h 45m nahi hue hain, to Cache use karo.
+    # 4 Hours 45 Minutes Cache (17100 seconds)
     if CACHE_STORE["data"] and (current_time - CACHE_STORE["last_updated"] < 17100):
-        print("⚡ Serving from Cache (Next update in few hours)")
         return {"status": "LIVE_CACHED", "data": CACHE_STORE["data"]}
 
-    # 2. FETCH NEW DATA (Jab time poora ho jaye)
     if not API_KEY:
         return {"status": "SIMULATION_NO_KEY", "data": generate_simulation()}
 
-    print("🔄 Time expired. Fetching fresh data from AbuseIPDB...")
     url = "https://api.abuseipdb.com/api/v2/blacklist"
     params = {'confidenceMinimum': '90', 'limit': '50'}
     headers = {'Accept': 'application/json', 'Key': API_KEY}
@@ -74,19 +68,15 @@ def get_attacks():
     try:
         response = requests.get(url, headers=headers, params=params)
         
-        # Handle Limit Exhaustion (429)
         if response.status_code == 429:
-            print("⚠️ API Limit Hit. Replaying Cache.")
             if CACHE_STORE["data"]:
                 return {"status": "LIMIT_EXHAUSTED_REPLAY", "data": CACHE_STORE["data"]}
             return {"status": "SIMULATION_FALLBACK", "data": generate_simulation()}
 
-        # Success (200)
         if response.status_code == 200:
             raw_data = response.json().get('data', [])
             enriched_data = []
             
-            # Enrich Data
             for item in raw_data[:15]:
                 ip = item['ipAddress']
                 try:
@@ -102,7 +92,6 @@ def get_attacks():
                 except:
                     continue
             
-            # Update Cache
             if enriched_data:
                 CACHE_STORE["data"] = enriched_data
                 CACHE_STORE["last_updated"] = current_time
@@ -112,7 +101,6 @@ def get_attacks():
     except Exception as e:
         print(f"Error: {e}")
 
-    # Fallback
     if CACHE_STORE["data"]:
          return {"status": "ERROR_REPLAY", "data": CACHE_STORE["data"]}
          
