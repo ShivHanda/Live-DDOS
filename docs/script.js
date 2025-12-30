@@ -1,16 +1,13 @@
 const API_URL = 'https://live-ddos.onrender.com/attacks';
 
-// --- NEON CONFIGURATION ---
-const NEON_COLORS = [
-    '#ff00ff', // Hot Pink
-    '#00ffff', // Cyan
-    '#00ff00', // Lime
-    '#ffff00', // Yellow
-    '#ff3333', // Red
-    '#9d00ff'  // Electric Purple
-];
+const NEON_COLORS = ['#ff00ff', '#00ffff', '#00ff00', '#ffff00', '#ff3333'];
 
-let attackersPool = []; 
+// Helper: Random Color
+const randomChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Hum do alag list maintain karenge
+let attackersPool = [];   // Isme saare attacks honge (Beacons/Arcs ke liye)
+let uniqueLabels = [];    // Isme sirf unique cities hongi (Text ke liye)
 
 const world = Globe()
     (document.getElementById('globeViz'))
@@ -20,38 +17,34 @@ const world = Globe()
     .atmosphereColor('#3a228a')
     .atmosphereAltitude(0.15)
     
-    // --- 1. ARCS (Threads) ---
+    // --- 1. ARCS (Show ALL attacks) ---
     .arcColor(d => d.arcColor)
     .arcDashLength(0.4)
     .arcDashGap(0.2)
     .arcDashAnimateTime(2000)
-    .arcStroke(0.6)
+    .arcStroke(0.5)
 
-    // --- 2. BEACONS (Solid Light Pillars) ---
-    // Fix: PathData ko sahi se configure kiya hai
+    // --- 2. BEACONS (Show ALL beacons) ---
     .pathsData([]) 
     .pathPoints(d => d.coords)
-    .pathColor(d => d.solidColor) // Solid Neon
-    .pathDashLength(1)            // No gaps, solid beam
-    .pathStroke(1.5)              // Thoda mota kiya
+    .pathColor(d => d.solidColor)
+    .pathDashLength(1)
+    .pathStroke(2.0)
     .pathTransitionDuration(1000)
 
-    // --- 3. CITY LABELS (Non-Overlapping) ---
+    // --- 3. LABELS (Show ONLY Unique Cities) ---
+    // Note: Hum yahan 'uniqueLabels' use karenge
     .labelsData([])
-    .labelLat(d => d.lat) // Use Jittered Lat
-    .labelLng(d => d.lon) // Use Jittered Lon
+    .labelLat(d => d.lat)
+    .labelLng(d => d.lon)
     .labelText(d => d.city)
-    .labelSize(1.2)
-    .labelDotRadius(0.8)  // Dot thoda bada kiya
-    .labelColor(d => d.solidColor)
+    .labelSize(1.0)
+    .labelDotRadius(0.6)
+    .labelColor(() => '#ffffff') // Labels white rahenge taaki saaf dikhein
     .labelResolution(2)
     .labelAltitude(0.02)
     
-    // No Dots (Beacons kaafi hain)
     .pointsData([]);
-
-// Helper: Random Color
-const randomChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function fetchData() {
     fetch(API_URL)
@@ -60,9 +53,8 @@ function fetchData() {
             const statusEl = document.getElementById('feedStatus');
             const countEl = document.getElementById('threatCount');
 
-            // UI Status
             if (response.status && response.status.includes('LIVE')) {
-                statusEl.innerText = "LIVE FEED (CACHED)";
+                statusEl.innerText = "LIVE FEED";
                 statusEl.className = "status-badge live";
             } else {
                 statusEl.innerText = "SIMULATION";
@@ -70,50 +62,66 @@ function fetchData() {
             }
 
             if (response.data && response.data.length > 0) {
-                const newData = response.data.map(ip => {
+                
+                // 1. Process All Attacks (Arcs & Beacons)
+                const newAttacks = response.data.map(ip => {
                     const neon = randomChoice(NEON_COLORS);
+                    const sourceLat = ip.lat;
+                    const sourceLng = ip.lon;
                     
-                    // --- JITTER LOGIC (Anti-Overlap) ---
-                    // Har attacker ko thoda sa random shift karo (-0.5 to +0.5 degrees)
-                    // Isse Dublin ke 3 attackers alag-alag dikhenge
-                    const jitterLat = ip.lat + (Math.random() - 0.5) * 2.0; 
-                    const jitterLng = ip.lon + (Math.random() - 0.5) * 2.0;
-
-                    // Fixed Target Logic
+                    // Har attack ka alag target
                     const targetLat = (Math.random() - 0.5) * 160;
                     const targetLng = (Math.random() - 0.5) * 360;
 
                     return {
-                        city: ip.city,
-                        lat: jitterLat,  // Jittered coordinate use karo
-                        lon: jitterLng,  // Jittered coordinate use karo
+                        // Coordinates
+                        lat: sourceLat,
+                        lon: sourceLng,
                         
-                        // Colors
-                        arcColor: ['rgba(0,0,0,0)', neon], // Fade Effect
+                        // Visuals
+                        arcColor: ['rgba(0,0,0,0)', neon],
                         solidColor: neon,
                         
-                        // Arc
-                        startLat: jitterLat,
-                        startLng: jitterLng,
+                        // Arc Logic
+                        startLat: sourceLat,
+                        startLng: sourceLng,
                         endLat: targetLat,
                         endLng: targetLng,
                         
-                        // Beacon (Vertical Pillar)
-                        // Zameen (0.01) se Aasmaan (0.5) tak
+                        // Beacon Logic (Pillar)
                         coords: [
-                            [jitterLat, jitterLng, 0.01],  
-                            [jitterLat, jitterLng, 0.5]    
+                            [sourceLat, sourceLng, 0],
+                            [sourceLat, sourceLng, 0.35]
                         ]
                     };
                 });
 
-                attackersPool = newData;
+                // 2. Process Unique Labels
+                // Hum ek temporary Set use karenge duplicate cities hatane ke liye
+                const seenCities = new Set();
+                const newLabels = [];
+
+                response.data.forEach(ip => {
+                    // Agar ye city pehle nahi dekhi, to add karo
+                    if (!seenCities.has(ip.city)) {
+                        seenCities.add(ip.city);
+                        newLabels.push({
+                            city: ip.city,
+                            lat: ip.lat,
+                            lon: ip.lon
+                        });
+                    }
+                });
+
+                attackersPool = newAttacks;
+                uniqueLabels = newLabels; // Update global variable
+
                 countEl.innerText = attackersPool.length;
 
-                // Update Globe Layers
-                world.arcsData(attackersPool);
-                world.pathsData(attackersPool); // Beacons draw karega
-                world.labelsData(attackersPool); // Labels draw karega
+                // Update Visuals
+                world.arcsData(attackersPool);   // 5 attacks = 5 lines
+                world.pathsData(attackersPool);  // 5 attacks = 5 beacons
+                world.labelsData(uniqueLabels);  // 5 attacks from Moscow = 1 Label
             }
         })
         .catch(err => console.error("API Error:", err));
@@ -123,6 +131,5 @@ function fetchData() {
 fetchData();
 setInterval(fetchData, 300000); 
 
-// Rotation
 world.controls().autoRotate = true;
-world.controls().autoRotateSpeed = 0.5;
+world.controls().autoRotateSpeed = 0.6;
