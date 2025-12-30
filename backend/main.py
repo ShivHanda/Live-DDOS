@@ -47,7 +47,7 @@ def generate_simulation():
         })
     return mock_data
 
-@app.get("/")
+@app.get("/", methods=["GET", "HEAD"])
 def read_root():
     return {"system": "Operational", "mode": CACHE_STORE["status_label"]}
 
