@@ -20,33 +20,34 @@ const world = Globe()
     .atmosphereColor('#3a228a')
     .atmosphereAltitude(0.15)
     
-    // --- 1. THREAD STYLE ARCS (Wapas Aa Gaye) ---
-    .arcColor(d => d.arcColor) // Gradient color use karega
+    // --- 1. ARCS (Threads) ---
+    .arcColor(d => d.arcColor)
     .arcDashLength(0.4)
-    .arcDashGap(0.2)           // Tight gap for thread look
+    .arcDashGap(0.2)
     .arcDashAnimateTime(2000)
     .arcStroke(0.6)
 
     // --- 2. BEACONS (Solid Light Pillars) ---
+    // Fix: PathData ko sahi se configure kiya hai
     .pathsData([]) 
     .pathPoints(d => d.coords)
-    .pathColor(d => d.solidColor) // Solid Neon color
-    .pathDashLength(1)
-    .pathStroke(1.2)
+    .pathColor(d => d.solidColor) // Solid Neon
+    .pathDashLength(1)            // No gaps, solid beam
+    .pathStroke(1.5)              // Thoda mota kiya
     .pathTransitionDuration(1000)
 
-    // --- 3. CITY LABELS ---
+    // --- 3. CITY LABELS (Non-Overlapping) ---
     .labelsData([])
-    .labelLat(d => d.lat)
-    .labelLng(d => d.lon)
+    .labelLat(d => d.lat) // Use Jittered Lat
+    .labelLng(d => d.lon) // Use Jittered Lon
     .labelText(d => d.city)
-    .labelSize(1.5)
-    .labelDotRadius(0.5)
-    .labelColor(d => d.solidColor) // Same color as beacon
+    .labelSize(1.2)
+    .labelDotRadius(0.8)  // Dot thoda bada kiya
+    .labelColor(d => d.solidColor)
     .labelResolution(2)
     .labelAltitude(0.02)
     
-    // No Dots
+    // No Dots (Beacons kaafi hain)
     .pointsData([]);
 
 // Helper: Random Color
@@ -59,46 +60,49 @@ function fetchData() {
             const statusEl = document.getElementById('feedStatus');
             const countEl = document.getElementById('threatCount');
 
-            // UI Status Update
+            // UI Status
             if (response.status && response.status.includes('LIVE')) {
-                statusEl.innerText = "LIVE FEED";
+                statusEl.innerText = "LIVE FEED (CACHED)";
                 statusEl.className = "status-badge live";
             } else {
-                statusEl.innerText = "SIMULATION / CACHED";
+                statusEl.innerText = "SIMULATION";
                 statusEl.className = "status-badge replay";
             }
 
             if (response.data && response.data.length > 0) {
                 const newData = response.data.map(ip => {
                     const neon = randomChoice(NEON_COLORS);
-                    const sourceLat = ip.lat;
-                    const sourceLng = ip.lon;
                     
-                    // Fixed Random Target
+                    // --- JITTER LOGIC (Anti-Overlap) ---
+                    // Har attacker ko thoda sa random shift karo (-0.5 to +0.5 degrees)
+                    // Isse Dublin ke 3 attackers alag-alag dikhenge
+                    const jitterLat = ip.lat + (Math.random() - 0.5) * 2.0; 
+                    const jitterLng = ip.lon + (Math.random() - 0.5) * 2.0;
+
+                    // Fixed Target Logic
                     const targetLat = (Math.random() - 0.5) * 160;
                     const targetLng = (Math.random() - 0.5) * 360;
 
                     return {
-                        city: ip.city, 
-                        lat: sourceLat, 
-                        lon: sourceLng, 
+                        city: ip.city,
+                        lat: jitterLat,  // Jittered coordinate use karo
+                        lon: jitterLng,  // Jittered coordinate use karo
                         
-                        // --- COLORS ---
-                        // Arc ke liye Gradient (Transparent -> Neon) - Thread Look
-                        arcColor: ['rgba(0,0,0,0)', neon],
-                        // Beacon aur Label ke liye Solid Neon
+                        // Colors
+                        arcColor: ['rgba(0,0,0,0)', neon], // Fade Effect
                         solidColor: neon,
                         
-                        // Arc Config
-                        startLat: sourceLat,
-                        startLng: sourceLng,
+                        // Arc
+                        startLat: jitterLat,
+                        startLng: jitterLng,
                         endLat: targetLat,
                         endLng: targetLng,
                         
-                        // Beacon Config (Pillar)
+                        // Beacon (Vertical Pillar)
+                        // Zameen (0.01) se Aasmaan (0.5) tak
                         coords: [
-                            [sourceLat, sourceLng, 0],    // Ground
-                            [sourceLat, sourceLng, 0.4]   // Sky Height
+                            [jitterLat, jitterLng, 0.01],  
+                            [jitterLat, jitterLng, 0.5]    
                         ]
                     };
                 });
@@ -106,10 +110,10 @@ function fetchData() {
                 attackersPool = newData;
                 countEl.innerText = attackersPool.length;
 
-                // Update All Layers
+                // Update Globe Layers
                 world.arcsData(attackersPool);
-                world.pathsData(attackersPool);
-                world.labelsData(attackersPool);
+                world.pathsData(attackersPool); // Beacons draw karega
+                world.labelsData(attackersPool); // Labels draw karega
             }
         })
         .catch(err => console.error("API Error:", err));
@@ -117,11 +121,8 @@ function fetchData() {
 
 // Init
 fetchData();
-
-// Check for updates every 5 minutes 
-// (Backend khud 4h 45m tak cache serve karega, uske baad hi naya layega)
 setInterval(fetchData, 300000); 
 
-// Cinematic Rotation
+// Rotation
 world.controls().autoRotate = true;
 world.controls().autoRotateSpeed = 0.5;
