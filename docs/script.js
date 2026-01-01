@@ -12,10 +12,10 @@ let uniqueLabels = [];    // Isme sirf unique cities hongi (Text ke liye)
 const world = Globe()
     (document.getElementById('globeViz'))
     .backgroundColor('#050505') 
-    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
     .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
     .atmosphereColor('#3a228a')
-    .atmosphereAltitude(0.15)
+    .atmosphereAltitude(0.12)
     
     // --- 1. ARCS (Show ALL attacks) ---
     .arcColor(d => d.arcColor)
