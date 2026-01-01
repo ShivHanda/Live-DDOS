@@ -77,10 +77,10 @@ def get_attacks():
             raw_data = response.json().get('data', [])
             enriched_data = []
             
-            for item in raw_data[:15]:
+            for item in raw_data[:45]:
                 ip = item['ipAddress']
                 try:
-                    geo = requests.get(f"http://ip-api.com/json/{ip}", timeout=1).json()
+                    geo = requests.get(f"http://ip-api.com/json/{ip}", timeout=1.75).json()
                     if geo.get('status') == 'success':
                         enriched_data.append({
                             "ip": ip,
