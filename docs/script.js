@@ -1,18 +1,19 @@
 const API_URL = 'https://live-ddos.onrender.com/attacks';
 
+// Neon Colors Palette
 const NEON_COLORS = ['#ff00ff', '#00ffff', '#00ff00', '#ffff00', '#ff3333'];
 const randomChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 const world = Globe()
     (document.getElementById('globeViz'))
     .backgroundColor('#050505') 
-    // Night Earth Texture (Jo aapko pasand aaya tha)
     .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg') 
     .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
     .atmosphereColor('#3a228a')
     .atmosphereAltitude(0.12)
     
-    // --- LAYERS CONFIGURATION ---
+    // --- LAYERS ---
+    
     // 1. Arcs (Lasers)
     .arcColor(d => d.arcColor)
     .arcDashLength(0.4)
@@ -20,27 +21,32 @@ const world = Globe()
     .arcDashAnimateTime(2000)
     .arcStroke(0.5)
 
-    // 2. Beacons (Pillars)
+    // 2. Beacons (Ab ye "Map Pins" ki sticks ban gayi hain)
     .pathsData([]) 
     .pathPoints(d => d.coords) 
     .pathColor(d => d.solidColor) 
     .pathDashLength(1) 
-    .pathStroke(2.0) 
+    .pathStroke(1.5) // Thoda patla kiya taaki elegant lage
     .pathTransitionDuration(1000)
 
-    // 3. Labels (City Names)
+    // 3. Labels (City Names - Ab Zameen ke paas)
     .labelsData([]) 
     .labelLat(d => d.lat) 
     .labelLng(d => d.lon) 
     .labelText(d => d.city) 
-    .labelSize(1.0) 
-    .labelDotRadius(0.6) 
+    .labelSize(0.8) // Font thoda chota for clean look
+    .labelDotRadius(0.4) 
     .labelColor(d => d.solidColor) 
     .labelResolution(2) 
-    .labelAltitude(d => d.labelAlt)
+    .labelAltitude(d => d.labelAlt) // Calculated low altitude
     
-    // 4. No Dots (Clean look)
-    .pointsData([]);
+    // 4. Surface Dots (Zameen par nishan)
+    .pointsData([])
+    .pointLat(d => d.lat)
+    .pointLng(d => d.lon)
+    .pointColor(d => d.solidColor)
+    .pointAltitude(0) // Bilkul zameen par
+    .pointRadius(0.3); // Chota sa dot
 
 function fetchData() {
     fetch(API_URL)
@@ -50,22 +56,17 @@ function fetchData() {
             const countEl = document.getElementById('threatCount');
             const checksEl = document.getElementById('checksLeft');
 
-            // --- 1. HANDLE SMART STATUS & CHECKS UI ---
+            // --- UI Updates ---
             let checks = response.checks_left !== undefined ? response.checks_left : 0;
-            
-            // Check Counter Update
             if(checksEl) {
                 checksEl.innerText = `${checks} / 5`;
-                if(checks === 0) checksEl.style.color = "#ff3333"; // Red (Empty)
-                else checksEl.style.color = "#00ff88"; // Green (Available)
+                checksEl.style.color = checks === 0 ? "#ff3333" : "#00ff88";
             }
 
-            // Status Badge Logic
             if (response.status === 'LIVE_FRESH') {
                 statusEl.innerText = "LIVE (FRESH)";
                 statusEl.className = "status-badge live";
             } else if (response.status === 'LIVE_COOLDOWN') {
-                // Cooldown dikhana zaroori hai
                 statusEl.innerText = `COOLDOWN (${response.next_check_in}s)`;
                 statusEl.className = "status-badge cooldown";
             } else {
@@ -73,64 +74,62 @@ function fetchData() {
                 statusEl.className = "status-badge replay";
             }
 
-            // --- 2. MAP VISUALIZATION LOGIC ---
+            // --- Visual Logic ---
             if (response.data && response.data.length > 0) {
                 const processedData = response.data.map((ip) => {
                     const neon = randomChoice(NEON_COLORS);
                     const sourceLat = ip.lat;
                     const sourceLng = ip.lon;
                     
-                    // Random Targets
+                    // Target Logic
                     const targetLat = (Math.random() - 0.5) * 160;
                     const targetLng = (Math.random() - 0.5) * 360;
                     
-                    // Jitter for Label Altitude (Overlapping fix)
-                    const randomLabelAlt = 0.01 + (Math.random() * 0.15);
+                    // --- HEIGHT FIX: GRAVITY APPLIED ---
+                    // Pehle ye 0.01 + 0.15 tha (Bahut uncha)
+                    // Ab ye 0.02 + 0.04 hai (Zameen ke kareeb, bas overlap bachane ke liye thoda variation)
+                    const labelHeight = 0.02 + (Math.random() * 0.04); 
 
                     return {
                         city: ip.city, 
                         lat: sourceLat, 
                         lon: sourceLng, 
-                        labelAlt: randomLabelAlt,
+                        labelAlt: labelHeight, // Text height
                         
-                        // Colors
                         arcColor: ['rgba(0,0,0,0)', neon], 
                         solidColor: neon,
                         
-                        // Arcs
                         startLat: sourceLat, startLng: sourceLng, 
                         endLat: targetLat, endLng: targetLng,
                         
-                        // Beacons
-                        coords: [[sourceLat, sourceLng, 0], [sourceLat, sourceLng, 0.35]]
+                        // Beacon Stick (Zameen se Label tak)
+                        // [Lat, Lon, 0] se [Lat, Lon, labelHeight] tak line
+                        coords: [[sourceLat, sourceLng, 0], [sourceLat, sourceLng, labelHeight]]
                     };
                 });
 
-                // --- 3. UNIQUE LABEL FILTERING (Aapka Purana Logic) ---
+                // Deduplicate for Labels & Dots
                 const seenCities = new Set();
-                const uniqueLabels = [];
+                const uniqueLocations = [];
                 processedData.forEach(d => {
                     if (!seenCities.has(d.city)) {
                         seenCities.add(d.city);
-                        uniqueLabels.push(d);
+                        uniqueLocations.push(d);
                     }
                 });
 
                 countEl.innerText = processedData.length;
                 
-                // Update Layers
-                world.arcsData(processedData);
-                world.pathsData(processedData);
-                world.labelsData(uniqueLabels); // Sirf Unique Cities dikhayenge
+                world.arcsData(processedData);    // Arcs (Hawa mein)
+                world.pathsData(uniqueLocations); // Pins (Zameen se juday hue)
+                world.labelsData(uniqueLabels);   // Text (Pin ke upar)
+                world.pointsData(uniqueLocations);// Dot (Zameen par)
             }
         })
         .catch(err => console.error("API Error:", err));
 }
 
-// Init
 fetchData();
-
-// Poll every 60 seconds (Backend handles the limits, UI needs updates)
 setInterval(fetchData, 60000); 
 
 world.controls().autoRotate = true;
