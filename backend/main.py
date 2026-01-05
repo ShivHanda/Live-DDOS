@@ -2,7 +2,8 @@ import os
 import time
 import random
 import requests
-from fastapi import FastAPI, Request
+from datetime import datetime
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -18,12 +19,15 @@ app.add_middleware(
 
 API_KEY = os.getenv("LiveDDOS")
 
-CACHE_STORE = {
-    "data": [],
-    "last_updated": 0,
-    "status_label": "INIT"
+# --- SMART STATE STORE ---
+SYSTEM_STATE = {
+    "cached_data": [],           # Store IP data
+    "last_api_call_time": 0,     # Timestamp of last fresh fetch
+    "daily_usage_count": 0,      # How many times fetched today
+    "last_reset_date": datetime.now().date() # To reset count daily
 }
 
+# --- SIMULATION FALLBACK ---
 def generate_simulation():
     hubs = [
         {"city": "Beijing", "country": "CN", "lat": 39.90, "lon": 116.40},
@@ -44,23 +48,46 @@ def generate_simulation():
         })
     return mock_data
 
-# --- FIX: Using api_route to allow HEAD requests for UptimeRobot ---
 @app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
-    return {"system": "Operational", "mode": CACHE_STORE["status_label"]}
+    return {"system": "Operational", "checks_used": SYSTEM_STATE["daily_usage_count"]}
 
 @app.get("/attacks")
 def get_attacks():
-    global CACHE_STORE
-    current_time = time.time()
+    global SYSTEM_STATE
     
-    # 4 Hours 45 Minutes Cache (17100 seconds)
-    if CACHE_STORE["data"] and (current_time - CACHE_STORE["last_updated"] < 17100):
-        return {"status": "LIVE_CACHED", "data": CACHE_STORE["data"]}
+    # 1. RESET QUOTA IF NEW DAY
+    current_date = datetime.now().date()
+    if current_date > SYSTEM_STATE["last_reset_date"]:
+        print("📅 New Day Detected! Resetting Quota.")
+        SYSTEM_STATE["daily_usage_count"] = 0
+        SYSTEM_STATE["last_reset_date"] = current_date
 
+    # 2. CHECK COOLDOWN (3 Minutes = 180 Seconds)
+    # Agar abhi fresh data liya tha, to 3 min tak wahi dikhao
+    time_since_last = time.time() - SYSTEM_STATE["last_api_call_time"]
+    if SYSTEM_STATE["cached_data"] and time_since_last < 180:
+        return {
+            "status": "LIVE_COOLDOWN", 
+            "checks_left": 5 - SYSTEM_STATE["daily_usage_count"],
+            "next_check_in": int(180 - time_since_last),
+            "data": SYSTEM_STATE["cached_data"]
+        }
+
+    # 3. CHECK QUOTA EXHAUSTION
+    if SYSTEM_STATE["daily_usage_count"] >= 5:
+        return {
+            "status": "QUOTA_EXHAUSTED",
+            "checks_left": 0,
+            "data": SYSTEM_STATE["cached_data"] if SYSTEM_STATE["cached_data"] else generate_simulation()
+        }
+
+    # 4. FETCH FRESH DATA (Consumes 1 Credit)
     if not API_KEY:
-        return {"status": "SIMULATION_NO_KEY", "data": generate_simulation()}
+        return {"status": "SIMULATION_NO_KEY", "checks_left": 5, "data": generate_simulation()}
 
+    print(f"🔄 Fetching Live Data... (Attempt {SYSTEM_STATE['daily_usage_count'] + 1}/5)")
+    
     url = "https://api.abuseipdb.com/api/v2/blacklist"
     params = {'confidenceMinimum': '90', 'limit': '50'}
     headers = {'Accept': 'application/json', 'Key': API_KEY}
@@ -68,19 +95,15 @@ def get_attacks():
     try:
         response = requests.get(url, headers=headers, params=params)
         
-        if response.status_code == 429:
-            if CACHE_STORE["data"]:
-                return {"status": "LIMIT_EXHAUSTED_REPLAY", "data": CACHE_STORE["data"]}
-            return {"status": "SIMULATION_FALLBACK", "data": generate_simulation()}
-
         if response.status_code == 200:
             raw_data = response.json().get('data', [])
             enriched_data = []
             
+            # Processing Top 45 IPs
             for item in raw_data[:45]:
                 ip = item['ipAddress']
                 try:
-                    geo = requests.get(f"http://ip-api.com/json/{ip}", timeout=1.75).json()
+                    geo = requests.get(f"http://ip-api.com/json/{ip}", timeout=1.5).json()
                     if geo.get('status') == 'success':
                         enriched_data.append({
                             "ip": ip,
@@ -93,15 +116,28 @@ def get_attacks():
                     continue
             
             if enriched_data:
-                CACHE_STORE["data"] = enriched_data
-                CACHE_STORE["last_updated"] = current_time
-                CACHE_STORE["status_label"] = "LIVE_FRESH"
-                return {"status": "LIVE_FRESH", "data": enriched_data}
-            
+                # Update State
+                SYSTEM_STATE["cached_data"] = enriched_data
+                SYSTEM_STATE["daily_usage_count"] += 1
+                SYSTEM_STATE["last_api_call_time"] = time.time()
+                
+                return {
+                    "status": "LIVE_FRESH", 
+                    "checks_left": 5 - SYSTEM_STATE["daily_usage_count"],
+                    "data": enriched_data
+                }
+        
+        elif response.status_code == 429:
+            # Agar API ne mana kar diya
+            SYSTEM_STATE["daily_usage_count"] = 5 # Mark as exhausted
+            return {"status": "QUOTA_EXHAUSTED", "checks_left": 0, "data": SYSTEM_STATE["cached_data"]}
+
     except Exception as e:
         print(f"Error: {e}")
 
-    if CACHE_STORE["data"]:
-         return {"status": "ERROR_REPLAY", "data": CACHE_STORE["data"]}
-         
-    return {"status": "ERROR_SIMULATION", "data": generate_simulation()}
+    # Fallback
+    return {
+        "status": "ERROR_SIMULATION", 
+        "checks_left": 5 - SYSTEM_STATE["daily_usage_count"],
+        "data": SYSTEM_STATE["cached_data"] if SYSTEM_STATE["cached_data"] else generate_simulation()
+    }
