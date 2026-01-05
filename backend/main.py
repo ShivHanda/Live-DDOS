@@ -21,10 +21,10 @@ API_KEY = os.getenv("LiveDDOS")
 
 # --- SMART STATE STORE ---
 SYSTEM_STATE = {
-    "cached_data": [],           # Store IP data
-    "last_api_call_time": 0,     # Timestamp of last fresh fetch
-    "daily_usage_count": 0,      # How many times fetched today
-    "last_reset_date": datetime.now().date() # To reset count daily
+    "cached_data": [],           # Ab ye list lambi hoti jayegi (Accumulator)
+    "last_api_call_time": 0,     
+    "daily_usage_count": 0,      
+    "last_reset_date": datetime.now().date() 
 }
 
 # --- SIMULATION FALLBACK ---
@@ -50,21 +50,25 @@ def generate_simulation():
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
-    return {"system": "Operational", "checks_used": SYSTEM_STATE["daily_usage_count"]}
+    return {
+        "system": "Operational", 
+        "checks_used": SYSTEM_STATE["daily_usage_count"],
+        "total_cached_threats": len(SYSTEM_STATE["cached_data"])
+    }
 
 @app.get("/attacks")
 def get_attacks():
     global SYSTEM_STATE
     
-    # 1. RESET QUOTA IF NEW DAY
+    # 1. RESET QUOTA & DATA IF NEW DAY
     current_date = datetime.now().date()
     if current_date > SYSTEM_STATE["last_reset_date"]:
-        print("📅 New Day Detected! Resetting Quota.")
+        print("📅 New Day Detected! Wiping Old Cache & Resetting Quota.")
         SYSTEM_STATE["daily_usage_count"] = 0
+        SYSTEM_STATE["cached_data"] = [] # Naya din, khali slate
         SYSTEM_STATE["last_reset_date"] = current_date
 
-    # 2. CHECK COOLDOWN (3 Minutes = 180 Seconds)
-    # Agar abhi fresh data liya tha, to 3 min tak wahi dikhao
+    # 2. CHECK COOLDOWN (3 Minutes)
     time_since_last = time.time() - SYSTEM_STATE["last_api_call_time"]
     if SYSTEM_STATE["cached_data"] and time_since_last < 180:
         return {
@@ -76,13 +80,15 @@ def get_attacks():
 
     # 3. CHECK QUOTA EXHAUSTION
     if SYSTEM_STATE["daily_usage_count"] >= 5:
+        # Jab quota khatam, tab din bhar ka jama hua saara data dikhao
+        data_to_show = SYSTEM_STATE["cached_data"] if SYSTEM_STATE["cached_data"] else generate_simulation()
         return {
             "status": "QUOTA_EXHAUSTED",
             "checks_left": 0,
-            "data": SYSTEM_STATE["cached_data"] if SYSTEM_STATE["cached_data"] else generate_simulation()
+            "data": data_to_show
         }
 
-    # 4. FETCH FRESH DATA (Consumes 1 Credit)
+    # 4. FETCH FRESH DATA
     if not API_KEY:
         return {"status": "SIMULATION_NO_KEY", "checks_left": 5, "data": generate_simulation()}
 
@@ -99,7 +105,6 @@ def get_attacks():
             raw_data = response.json().get('data', [])
             enriched_data = []
             
-            # Processing Top 45 IPs
             for item in raw_data[:45]:
                 ip = item['ipAddress']
                 try:
@@ -116,26 +121,40 @@ def get_attacks():
                     continue
             
             if enriched_data:
-                # Update State
-                SYSTEM_STATE["cached_data"] = enriched_data
+                # --- LOGIC CHANGE: MERGE WITH EXISTING CACHE ---
+                # Hum ek Dictionary use karenge taaki duplicate IPs save na ho
+                
+                # 1. Purana Data Dictionary mein dalo
+                cache_map = {item['ip']: item for item in SYSTEM_STATE["cached_data"]}
+                
+                # 2. Naya Data Merge karo (Overwrite or Add)
+                for item in enriched_data:
+                    cache_map[item['ip']] = item
+                
+                # 3. Wapas List mein convert karke Save karo
+                SYSTEM_STATE["cached_data"] = list(cache_map.values())
+                
+                # Update Counters
                 SYSTEM_STATE["daily_usage_count"] += 1
                 SYSTEM_STATE["last_api_call_time"] = time.time()
                 
                 return {
                     "status": "LIVE_FRESH", 
                     "checks_left": 5 - SYSTEM_STATE["daily_usage_count"],
-                    "data": enriched_data
+                    "data": enriched_data # Return only FRESH data for notification, but next call will show all
+                    # Note: Frontend will usually render whatever we send here. 
+                    # If you want map to show ALL immediately, return SYSTEM_STATE["cached_data"] here instead of enriched_data.
+                    # Let's return ALL accumulated data immediately:
+                    "data": SYSTEM_STATE["cached_data"] 
                 }
         
         elif response.status_code == 429:
-            # Agar API ne mana kar diya
-            SYSTEM_STATE["daily_usage_count"] = 5 # Mark as exhausted
+            SYSTEM_STATE["daily_usage_count"] = 5 
             return {"status": "QUOTA_EXHAUSTED", "checks_left": 0, "data": SYSTEM_STATE["cached_data"]}
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Fallback
     return {
         "status": "ERROR_SIMULATION", 
         "checks_left": 5 - SYSTEM_STATE["daily_usage_count"],
