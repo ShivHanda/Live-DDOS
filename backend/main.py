@@ -122,7 +122,6 @@ def get_attacks():
             
             if enriched_data:
                 # --- LOGIC CHANGE: MERGE WITH EXISTING CACHE ---
-                # Hum ek Dictionary use karenge taaki duplicate IPs save na ho
                 
                 # 1. Purana Data Dictionary mein dalo
                 cache_map = {item['ip']: item for item in SYSTEM_STATE["cached_data"]}
@@ -138,13 +137,10 @@ def get_attacks():
                 SYSTEM_STATE["daily_usage_count"] += 1
                 SYSTEM_STATE["last_api_call_time"] = time.time()
                 
+                # --- FIX WAS HERE (Removed duplicate key and missing comma) ---
                 return {
                     "status": "LIVE_FRESH", 
                     "checks_left": 5 - SYSTEM_STATE["daily_usage_count"],
-                    "data": enriched_data # Return only FRESH data for notification, but next call will show all
-                    # Note: Frontend will usually render whatever we send here. 
-                    # If you want map to show ALL immediately, return SYSTEM_STATE["cached_data"] here instead of enriched_data.
-                    # Let's return ALL accumulated data immediately:
                     "data": SYSTEM_STATE["cached_data"] 
                 }
         
