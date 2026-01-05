@@ -10,12 +10,11 @@
     <style>
         body { 
             margin: 0; 
-            background-color: #050505; /* Deep Black */
+            background-color: #050505; 
             overflow: hidden; 
             font-family: 'Inter', sans-serif; 
         }
         
-        /* Glassmorphism Dashboard */
         #dashboard {
             position: absolute;
             top: 24px; left: 24px;
@@ -30,36 +29,16 @@
             box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
         }
 
-        h1 { 
-            margin: 0 0 16px 0; 
-            font-size: 14px; 
-            font-weight: 600; 
-            color: #888; 
-            letter-spacing: 1px; 
-            text-transform: uppercase;
-        }
-
-        .metric {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
+        h1 { margin: 0 0 16px 0; font-size: 14px; font-weight: 600; color: #888; letter-spacing: 1px; text-transform: uppercase; }
+        .metric { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .label { font-size: 13px; color: #ccc; }
         .value { font-size: 13px; font-weight: 600; }
 
-        /* Status Indicators */
-        .status-badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-        }
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
         .live { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
-        .replay { background: rgba(255, 170, 0, 0.2); color: #ffaa00; }
+        .cooldown { background: rgba(0, 200, 255, 0.2); color: #00ccff; }
+        .replay { background: rgba(255, 50, 50, 0.2); color: #ff3333; }
 
-        /* Clean Globe Container */
         #globeViz { width: 100vw; height: 100vh; }
     </style>
 </head>
@@ -68,8 +47,13 @@
         <h1>Network Integrity Monitor</h1>
         
         <div class="metric">
-            <span class="label">DATA FEED</span>
-            <span id="feedStatus" class="status-badge replay">CONNECTING...</span>
+            <span class="label">STATUS</span>
+            <span id="feedStatus" class="status-badge replay">INIT</span>
+        </div>
+
+        <div class="metric">
+            <span class="label">LIVE CHECKS TODAY</span>
+            <span id="checksLeft" class="value" style="color: #00ff88">5 / 5</span>
         </div>
         
         <div class="metric">
