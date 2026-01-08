@@ -88,7 +88,7 @@ function fetchData() {
                     // --- HEIGHT FIX: GRAVITY APPLIED ---
                     // Pehle ye 0.01 + 0.15 tha (Bahut uncha)
                     // Ab ye 0.02 + 0.04 hai (Zameen ke kareeb, bas overlap bachane ke liye thoda variation)
-                    const labelHeight = 0.04; 
+                    const labelHeight = 0.01; 
 
                     return {
                         city: ip.city, 
