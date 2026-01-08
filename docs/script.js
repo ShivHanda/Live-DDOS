@@ -122,7 +122,7 @@ function fetchData() {
                 
                 world.arcsData(processedData);    // Arcs (Hawa mein)
                 world.pathsData(uniqueLocations); // Pins (Zameen se juday hue)
-                world.labelsData(uniqueLabels);   // Text (Pin ke upar)
+                world.labelsData(uniqueLocations);   // Text (Pin ke upar)
                 world.pointsData(uniqueLocations);// Dot (Zameen par)
             }
         })
