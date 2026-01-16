@@ -10,9 +10,9 @@
 
 ## 🖼️ Visual Preview
 
-![Dashboard Preview](YOUR_SCREENSHOT_LINK_HERE)
-*(https://raw.githubusercontent.com/ShivHanda/Live-DDOS/main/Live%20DDOS%20Attacks.png)*
-
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ShivHanda/Live-DDOS/main/Live%20DDOS%20Attacks.png" width="70%" alt="Dashboard Preview">
+</p>
 ---
 
 ## 🚀 Live Demo
