@@ -1,7 +1,7 @@
 # 🌍 Global Threat Intel | Live DDoS Map
 
-![Project Status](https://img.shields.io/badge/Status-Live-success?style=for-the-badge)
-![Tech Stack](https://img.shields.io/badge/Stack-FastAPI%20%7C%20Three.js-blueviolet?style=for-the-badge)
+![Project Status](https://img.shields.io/badge/Status-Live-success?style=for-the-badge)   
+![Tech Stack](https://img.shields.io/badge/Stack-FastAPI%20%7C%20Three.js-blueviolet?style=for-the-badge)   
 ![Security](https://img.shields.io/badge/Intelligence-AbuseIPDB-red?style=for-the-badge)
 
 > **A military-grade, real-time 3D visualization of global cyber attacks.** > This project monitors, analyzes, and visualizes high-confidence cyber threats (DDoS, Botnets, Brute Force) on an interactive 3D globe.
@@ -11,7 +11,7 @@
 ## 🖼️ Visual Preview
 
 ![Dashboard Preview](YOUR_SCREENSHOT_LINK_HERE)
-*(https://github.com/ShivHanda/Live-DDOS/blob/main/Live%20DDOS%20Attacks.png)*
+*(https://raw.githubusercontent.com/ShivHanda/Live-DDOS/main/Live%20DDOS%20Attacks.png)*
 
 ---
 
